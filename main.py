@@ -8,10 +8,17 @@ from Waf import Waf_Detect
 from optparse import OptionParser
 import subprocess
 import sys
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import urlparse, parse_qsl
+from core_utils import get_parameters, replace_parameter, create_session
+from context_utils import detect_context
+from reflection_utils import find_reflection
+from confidence_utils import analyze_reflection
+from verification_utils import verify_reflection
+from reporting import write_json, write_text
 from concurrent.futures import ThreadPoolExecutor
 
-print(Fore.LIGHTBLUE_EX + """
+print(Fore.LIGHTBLUE_EX + r"""
                  _     _ _______ _______  _    _ _____ ______  _______ _______
                   \___/  |______ |______   \  /    |   |_____] |______ |______
                  _/   \_ ______| ______|    \/   __|__ |_____] |______ ______|
@@ -67,7 +74,8 @@ class Main:
         self.url = url
         self.output = output
         self.headers = headers
-        #print(headers)
+        self.session = create_session(headers)
+        self.timeout = 10
         self.result = []
 
     def read(self,filename):
@@ -81,15 +89,33 @@ class Main:
         return urls.split()
 
     def write(self, output, value):
-        '''
-        Writes the output back to the given filename.
-        '''
+        """Append one text value to the output file."""
         if not output:
             return None
-        subprocess.call(f"echo '{value}' >> {output}",shell=True)
 
-    def replace(self,url,param_name,value):
-        return re.sub(f"{param_name}=([^&]+)",f"{param_name}={value}",url)
+        with open(output, "a", encoding="utf-8") as f:
+            f.write(str(value) + "\n")
+
+    def write_reports(self, output, findings):
+        """Write structured TXT and JSON reports."""
+        if not findings:
+            return None
+
+        if output:
+            write_text(output, findings)
+            json_output = str(Path(output).with_suffix(".json"))
+        else:
+            json_output = "xss_vibes_report.json"
+
+        write_json(json_output, findings)
+
+        if output:
+            print(Fore.GREEN + f"[+] TXT REPORT: {output}")
+
+        print(Fore.GREEN + f"[+] JSON REPORT: {json_output}")
+
+    def replace(self, url, param_name, value):
+        return replace_parameter(url, param_name, value)
     def bubble_sort(self, arr):
         '''
         For sorting the payloads
@@ -131,62 +157,32 @@ class Main:
 
 
     def parameters(self, url):
-
-        '''
-        This function will return every parameter in the url as dictionary.
-        '''
-
-        param_names = []
-        params = urlparse(url).query
-        params = params.split("&")
-        if len(params) == 1:
-            params = params[0].split("=")
-            param_names.append(params[0])
-            # print("I am here")
-        else:
-            for param in params:
-                param = param.split("=")
-                # print(param)
-                param_names.append(param[0])
-        return param_names
+        """
+        Return unique GET parameter names using robust URL parsing.
+        """
+        return get_parameters(url)
 
     def parser(self, url, param_name, value):
-        '''
-        This function will replace the parameter's value with the given value and returns a dictionary
-        '''
-        final_parameters = {}
-        parsed_data = urlparse(url)
-        params = parsed_data.query
-        protocol = parsed_data.scheme
-        hostname = parsed_data.hostname
-        path = parsed_data.path
-        params = params.split("&")
-        if len(params) == 1:
-            params = params[0].split("=")
-            final_parameters[params[0]] = params[1]
-            #print("I am here")
-        else:
-            for param in params:
-                param = param.split("=")
-                #print(param)
-                final_parameters[param[0]] = param[1]
-        #print(final_parameters[param_name] + value)
-        final_parameters[param_name] = value
-        #print(final_parameters)
-        return final_parameters
+        """
+        Build request parameters while preserving the original URL structure.
+        """
+        params = dict(parse_qsl(urlparse(url).query, keep_blank_values=True))
+        params[param_name] = value
+        return params
 
     def validator(self, arr, param_name, url):
         dic = {param_name: []}
         try:
             for data in arr:
                 final_parameters = self.parser(url,param_name,data + "randomstring")
-                new_url = urlparse(url).scheme + "://" + urlparse(url).hostname + "/" + urlparse(url).path
+                parsed_url = urlparse(url)
+                new_url = parsed_url.scheme + "://" + parsed_url.netloc + parsed_url.path
                 #print(new_url)
                 if self.headers:
                     #print("I am here")
-                    response = requests.get(new_url,params=final_parameters,headers=self.headers,verify=False).text
+                    response = self.session.get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
                 else:
-                    response = requests.get(new_url,params=final_parameters,verify=False).text
+                    response = self.session.get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
                 if data + "randomstring" in response:
                     if not threads or threads == 1:
                         print(Fore.GREEN + f"[+] {data} is reflecting in the response")
@@ -272,6 +268,7 @@ class Main:
 
     def scanner(self,url):
         print(Fore.WHITE + f"[+] TESTING {url}")
+        found = False
         if waf:
             print(Fore.LIGHTGREEN_EX + "[+] DETECTING WAF")
             firewall = Waf_Detect(url).waf_detect()
@@ -299,33 +296,85 @@ class Main:
                     new_url = parsed_data.scheme +  "://" + parsed_data.netloc + parsed_data.path
                     #print(new_url)
                     #print(data)
-                    if self.headers:
-                        #print("I am here")
-                        response = requests.get(new_url,params=data, headers=self.headers,verify=False).text
-                    else:
-                        response = requests.get(new_url, params=data,verify=False).text
+                    response_obj = self.session.get(
+                        new_url,
+                        params=data,
+                        verify=False,
+                        timeout=self.timeout,
+                        allow_redirects=True,
+                    )
+
+                    response = response_obj.text
+
                     if payload in response:
-                        print(Fore.RED + f"[+] VULNERABLE: {url}\nPARAMETER: {key}\nPAYLOAD USED: {payload}")
-                        print(self.replace(url,key,payload))
-                        self.result.append(self.replace(url,key,payload))
-                        return True
+                        context = detect_context(response, payload)
+                        position, snippet = find_reflection(response, payload)
+                        evidence = analyze_reflection(response, payload, context)
+                        verification = verify_reflection(
+                            response,
+                            payload,
+                            context,
+                        )
+
+                        result_url = self.replace(url, key, payload)
+
+                        finding = {
+                            "url": url,
+                            "result_url": result_url,
+                            "parameter": key,
+                            "payload": payload,
+                            "context": context,
+                            "position": position,
+                            "snippet": snippet,
+                            "raw_markup": evidence["raw_markup"],
+                            "event_handler": evidence["event_handler"],
+                            "score": evidence["score"],
+                            "confidence": evidence["confidence"],
+                            "reflected": verification["reflected"],
+                            "markup_context": verification["markup_context"],
+                            "verification": verification["verification"],
+                            "status_code": response_obj.status_code,
+                            "content_type": response_obj.headers.get("Content-Type", ""),
+                            "final_url": response_obj.url,
+                        }
+
+                        print(
+                            Fore.RED
+                            + f"[+] REFLECTION FOUND: {url}\n"
+                            f"PARAMETER: {key}\n"
+                            f"PAYLOAD USED: {payload}\n"
+                            f"CONTEXT: {context}\n"
+                            f"POSITION: {position}\n"
+                            f"RAW MARKUP: {evidence['raw_markup']}\n"
+                            f"EVENT HANDLER: {evidence['event_handler']}\n"
+                            f"REFLECTION SCORE: {evidence['score']}/5\n"
+                            f"CONFIDENCE: {evidence['confidence']}\n"
+                            f"VERIFICATION: {verification['verification']}\n"
+                            f"STATUS CODE: {response_obj.status_code}\n"
+                            f"CONTENT-TYPE: {response_obj.headers.get('Content-Type', '')}\n"
+                            f"SNIPPET: {snippet}"
+                        )
+
+                        print(result_url)
+                        self.result.append(finding)
+                        found = True
                 except Exception as e:
                     print(e)
-        if not threads or threads == 1:
-            print(Fore.LIGHTWHITE_EX + f"[+] TARGET SEEMS TO BE NOT VULNERABLE")
+        if not found:
+            print(Fore.LIGHTWHITE_EX + f"[+] TARGET SEEMS TO HAVE NO REFLECTION FOUND")
         return None
 
 if __name__ == "__main__":
     urls = []
-    Scanner = Main(filename, output, headers=headers)
+    Scanner = Main(filename=filename, output=output, headers=headers)
     try:
         #out = []
         #print(headers)
         if url and not filename:
-            Scanner = Main(url,output,headers=headers)
+            Scanner = Main(url=url, output=output, headers=headers)
             Scanner.scanner(url)
             if Scanner.result:
-                Scanner.write(output,Scanner.result[0])
+                Scanner.write_reports(output, Scanner.result)
             exit()
         elif filename and crawl:
             Scanner.crawl()
@@ -344,8 +393,8 @@ if __name__ == "__main__":
         '''
         with ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(Scanner.scanner,urls)
-        for i in Scanner.result:
-            Scanner.write(output,i)
+        if Scanner.result:
+            Scanner.write_reports(output, Scanner.result)
         print(Fore.WHITE + "[+] COMPLETED")
     except Exception as e:
         print(e)

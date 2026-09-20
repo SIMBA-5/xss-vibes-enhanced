@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+*.bak
+*.before-*
+*.txt
+*.json
+
+xss_lab.py
+test_urls.txt
+test_report.json
+environment.js
+!payloads.json
