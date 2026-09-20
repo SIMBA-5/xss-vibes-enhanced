@@ -15,6 +15,7 @@ from context_utils import detect_context
 from reflection_utils import find_reflection
 from confidence_utils import analyze_reflection
 from verification_utils import verify_reflection
+from risk_utils import classify_risk
 from reporting import write_json, write_text
 from browser_verify import browser_verify
 from concurrent.futures import ThreadPoolExecutor
@@ -338,6 +339,14 @@ class Main:
                             browser_result = browser_verify(result_url)
                             print(Fore.CYAN + f"[+] BROWSER VERIFIED: {browser_result['browser_verified']}")
 
+                        risk_result = classify_risk(
+                            browser_result["browser_verified"],
+                            evidence["score"],
+                            evidence["confidence"],
+                            evidence["event_handler"],
+                            evidence["raw_markup"],
+                        )
+
                         finding = {
                             "url": url,
                             "result_url": result_url,
@@ -363,6 +372,8 @@ class Main:
                             "browser_dialog_message": browser_result["dialog_message"],
                             "browser_verification_reason": browser_result["verification_reason"],
                             "browser_error": browser_result["error"],
+                            "risk_level": risk_result["risk_level"],
+                            "risk_reason": risk_result["risk_reason"],
                             "verification_level": ("browser-verified" if browser_result["browser_verified"] else "reflection-candidate"),
                         }
 

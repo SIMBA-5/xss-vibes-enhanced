@@ -117,6 +117,8 @@ def write_text(filename: str, findings: list[dict]) -> None:
                 f"Browser verification reason: {finding.get('browser_verification_reason', '')}",
                 f"Browser error: {finding.get('browser_error', '')}",
                 f"Verification level: {finding.get('verification_level', '')}",
+                f"Risk level: {finding.get('risk_level', '')}",
+                f"Risk reason: {finding.get('risk_reason', '')}",
                 f"Snippet: {finding.get('snippet', '')}",
                 "-" * 80,
             ])
