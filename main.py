@@ -41,6 +41,7 @@ parser.add_option('-w', dest='custom_waf',help='use specific payloads related to
 parser.add_option('--crawl',dest='crawl',help='crawl then find xss',action="store_true")
 parser.add_option('--pipe',dest="pipe",action="store_true",help="pipe output of a process as an input")
 parser.add_option("--browser-verify", dest="browser_verify", action="store_true", help="verify reflected findings in a Chromium browser")
+parser.add_option("--max-payloads", dest="max_payloads", help="maximum number of XSS payloads to test per parameter")
 
 val,args = parser.parse_args()
 filename = val.filename
@@ -53,6 +54,11 @@ pipe = val.pipe
 custom_waf = val.custom_waf
 headers = val.headers
 browser_verify_enabled = val.browser_verify
+max_payloads = val.max_payloads
+try:
+    max_payloads = int(max_payloads) if max_payloads else 10
+except ValueError:
+    max_payloads = 10
 
 try:
     if headers:
@@ -267,6 +273,8 @@ class Main:
             if payload['count'] > size:
                 payload_list.append(payload['Payload'])
                 continue
+        if max_payloads > 0:
+            payload_list = payload_list[:max_payloads]
         return payload_list
 
 
