@@ -16,6 +16,7 @@ from reflection_utils import find_reflection
 from confidence_utils import analyze_reflection
 from verification_utils import verify_reflection
 from reporting import write_json, write_text
+from browser_verify import browser_verify
 from concurrent.futures import ThreadPoolExecutor
 
 print(Fore.LIGHTBLUE_EX + r"""
@@ -38,6 +39,7 @@ parser.add_option('--waf', dest='waf',action='store_true', help="detect web appl
 parser.add_option('-w', dest='custom_waf',help='use specific payloads related to W.A.F')
 parser.add_option('--crawl',dest='crawl',help='crawl then find xss',action="store_true")
 parser.add_option('--pipe',dest="pipe",action="store_true",help="pipe output of a process as an input")
+parser.add_option("--browser-verify", dest="browser_verify", action="store_true", help="verify reflected findings in a Chromium browser")
 
 val,args = parser.parse_args()
 filename = val.filename
@@ -49,6 +51,7 @@ waf = val.waf
 pipe = val.pipe
 custom_waf = val.custom_waf
 headers = val.headers
+browser_verify_enabled = val.browser_verify
 
 try:
     if headers:
@@ -318,6 +321,23 @@ class Main:
 
                         result_url = self.replace(url, key, payload)
 
+                        browser_result = {
+                            "browser_verified": False,
+                            "browser_started": False,
+                            "page_loaded": False,
+                            "dialog_detected": False,
+                            "dialog_type": None,
+                            "dialog_message": None,
+                            "verification_reason": None,
+                            "final_url": None,
+                            "error": None,
+                        }
+
+                        if browser_verify_enabled:
+                            print(Fore.WHITE + "[+] BROWSER VERIFYING")
+                            browser_result = browser_verify(result_url)
+                            print(Fore.CYAN + f"[+] BROWSER VERIFIED: {browser_result['browser_verified']}")
+
                         finding = {
                             "url": url,
                             "result_url": result_url,
@@ -336,6 +356,14 @@ class Main:
                             "status_code": response_obj.status_code,
                             "content_type": response_obj.headers.get("Content-Type", ""),
                             "final_url": response_obj.url,
+                            "browser_verified": browser_result["browser_verified"],
+                            "browser_started": browser_result["browser_started"],
+                            "browser_page_loaded": browser_result["page_loaded"],
+                            "browser_dialog_type": browser_result["dialog_type"],
+                            "browser_dialog_message": browser_result["dialog_message"],
+                            "browser_verification_reason": browser_result["verification_reason"],
+                            "browser_error": browser_result["error"],
+                            "verification_level": ("browser-verified" if browser_result["browser_verified"] else "reflection-candidate"),
                         }
 
                         print(
