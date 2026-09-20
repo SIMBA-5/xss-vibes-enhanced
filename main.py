@@ -20,6 +20,22 @@ from reporting import write_json, write_text
 from browser_verify import browser_verify
 from concurrent.futures import ThreadPoolExecutor
 
+def format_scan_error(stage, url, exc, payload=None):
+    if isinstance(exc, requests.exceptions.Timeout):
+        error_type = "timeout"
+    elif isinstance(exc, requests.exceptions.ConnectionError):
+        error_type = "connection-error"
+    elif isinstance(exc, requests.exceptions.RequestException):
+        error_type = "request-error"
+    else:
+        error_type = type(exc).__name__
+
+    message = f"[!] {stage}: {error_type} | URL: {url}"
+    if payload is not None:
+        message += f" | Payload: {payload}"
+    message += f" | {exc}"
+    return message
+
 print(Fore.LIGHTBLUE_EX + r"""
                  _     _ _______ _______  _    _ _____ ______  _______ _______
                   \___/  |______ |______   \  /    |   |_____] |______ |______
@@ -198,7 +214,7 @@ class Main:
                         print(Fore.GREEN + f"[+] {data} is reflecting in the response")
                     dic[param_name].append(data)
         except Exception as e:
-            print(e)
+            print(Fore.YELLOW + format_scan_error("validation", url, e))
 
         return dic
 
@@ -239,7 +255,7 @@ class Main:
                         new_dbs.append(dbs[i])
                     #size = len(dbs)
             except Exception as e:
-                print(e)
+                print(Fore.YELLOW + format_scan_error("payload-selection", url, e))
             if not new_dbs:
                 print(Fore.GREEN + "[+] NO PAYLOADS FOUND FOR THIS WAF")
                 exit()
@@ -406,7 +422,7 @@ class Main:
                         self.result.append(finding)
                         found = True
                 except Exception as e:
-                    print(e)
+                    print(Fore.YELLOW + format_scan_error("payload-test", url, e, payload))
         if not found:
             print(Fore.LIGHTWHITE_EX + f"[+] TARGET SEEMS TO HAVE NO REFLECTION FOUND")
         return None
@@ -444,6 +460,6 @@ if __name__ == "__main__":
             Scanner.write_reports(output, Scanner.result)
         print(Fore.WHITE + "[+] COMPLETED")
     except Exception as e:
-        print(e)
+        print(Fore.YELLOW + format_scan_error("scan", url, e))
 
 #print(Main("test.txt","out.txt").replace("http://testphp.vulnweb.com/listproducts.php?cat=1","cat","superman"))
