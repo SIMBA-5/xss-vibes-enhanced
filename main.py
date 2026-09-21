@@ -19,6 +19,7 @@ from risk_utils import classify_risk
 from reporting import write_json, write_text
 from browser_verify import browser_verify
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 def format_scan_error(stage, url, exc, payload=None):
     if isinstance(exc, requests.exceptions.Timeout):
@@ -100,9 +101,14 @@ class Main:
         self.url = url
         self.output = output
         self.headers = headers
-        self.session = create_session(headers)
+        self._thread_local = threading.local()
         self.timeout = 10
         self.result = []
+
+    def get_session(self):
+        if not hasattr(self._thread_local, "session"):
+            self._thread_local.session = create_session(self.headers)
+        return self._thread_local.session
 
     def read(self,filename):
         '''
@@ -206,9 +212,9 @@ class Main:
                 #print(new_url)
                 if self.headers:
                     #print("I am here")
-                    response = self.session.get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
+                    response = self.get_session().get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
                 else:
-                    response = self.session.get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
+                    response = self.get_session().get(new_url, params=final_parameters, verify=False, timeout=self.timeout).text
                 if data + "randomstring" in response:
                     if not threads or threads == 1:
                         print(Fore.GREEN + f"[+] {data} is reflecting in the response")
@@ -324,7 +330,7 @@ class Main:
                     new_url = parsed_data.scheme +  "://" + parsed_data.netloc + parsed_data.path
                     #print(new_url)
                     #print(data)
-                    response_obj = self.session.get(
+                    response_obj = self.get_session().get(
                         new_url,
                         params=data,
                         verify=False,
