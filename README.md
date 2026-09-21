@@ -71,4 +71,19 @@ cat katana.txt | python3 main.py --pipe -t 7
 - [Asif Pathan](https://www.linkedin.com/in/asifpathan48/): Contributed in adding payloads
 - [Kunal Dhumal](https://www.linkedin.com/in/kunal-dhumal-47356721a/): Contributed in adding payloads
 - [Krishna Gupta](https://www.linkedin.com/in/iamkrishnagupta/): Developed Module
-- [Sanjay](): Developed Module 
+- [Sanjay](): Developed Module
+
+### XSS VIBES V2 — DEVELOPER & MAINTAINER
+
+- **Hussein Mohammed Jamaa Ibrahim** — Penetration Tester, Developer & Maintainer
+  - GitHub: https://github.com/SIMBA-5
+  - LinkedIn: https://linkedin.com/in/hussain-mohammed-cs
+
+#### V2 Contributions
+- Added optional Chromium-based browser verification using Playwright.
+- Added finding deduplication and payload aggregation.
+- Added XSS risk classification.
+- Added configurable payload selection with `--max-payloads`.
+- Improved HTTP error handling.
+- Added thread-local HTTP sessions for concurrent scanning.
+- Added an automated test suite with 12 passing tests.
